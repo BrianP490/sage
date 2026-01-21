@@ -1,0 +1,10 @@
+# 1. Handle line endings automatically for text files
+* text=auto
+
+# 2. Force specific files to always use LF (Best for Docker/SageMaker)
+*.sh eol=lf
+*.py eol=lf
+*.ipynb eol=lf
+
+*.jpg binary
+*.png binary
