@@ -1,0 +1,10 @@
+.git
+*.egg-info
+
+__pycache__/
+*.pyc
+
+logs/
+tmp/
+*.log
+*.txt

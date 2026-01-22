@@ -1,0 +1,64 @@
+{
+  "aws": {
+    "aws_region": "us-east-1"
+  },
+  "data": {
+    "dataset_url": "hf://datasets/MaxPrestige/CA_Weather_Fire_Dataset_Cleaned/Data/CA_Weather_Fire_Dataset_Cleaned.csv",
+    "aws_bucket": "alexandria-reborn",
+    "project_prefix": "CA-Weather-Fire",
+    "data_file_path": "data-CLEAN.csv",
+    "data_splits_dir": "DataSplits",
+    "scaler_dir": "Scalers",
+    "target_column": "MAX_TEMP",
+    "extra_dropped_columns": []
+  }
+  ,
+  "parser_defaults": {
+    "epochs": 1,
+    "learning_rate": 0.0003,
+    "max_grad_norm": 3.0,
+    "dataloader_batch_size": 64,
+    "dataloader_pin_memory": false,
+    "dataloader_num_workers": 0,
+    "log_iterations": 128,
+    "eval_iterations": 128,
+    "use_cuda": false,
+    "device": "cpu",
+    "save_model": true,
+    "model_output_path": "INTEGRATED IN PIPELINE ENV VARIABLES"
+  },
+  "model": {
+    "in_dim": 5,
+    "intermediate_dim": 128,
+    "out_dim": 1,
+    "num_blocks": 12,
+    "dropout_rate": 0.1
+  },
+  "logging": {
+    "log_to_file": true,
+    "log_file": "logs/app.log",
+    "logger_name": "main",
+    "log_level": "INFO",
+    "log_mode": "w",
+    "log_format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    "date_format": "%Y-%m-%d %H:%M:%S",
+    "log_to_console": true
+  },
+  "training": {
+    "optimizer": "adamw",
+    "loss_function": "mae",
+    "early_stopping": false,
+    "early_stopping_patience": 10,
+    "checkpoint_dir": "./checkpoints"
+  },
+  "simulated_args": {
+    "--epochs": "1",
+    "--learning_rate": "0.003",
+    "--log_iterations": "256",
+    "--eval_iterations": "64",
+    "--dataloader_pin_memory": false,
+    "--use_cuda": false,
+    "--save_model": false,
+    "--model_output_path": "./Models/my_model.pt"
+  }
+}

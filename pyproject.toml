@@ -1,0 +1,8 @@
+
+
+[project]
+name = "weather_pred"  # The name you'll use to 'pip install'
+version = "0.1.0"
+
+[tool.setuptools.packages.find]
+where = ["src"] 
