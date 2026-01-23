@@ -1440,9 +1440,9 @@ def main(parser_args, global_config) -> int:
 
 
             # 3. Save the Source code dir to the /opt/ml/model dir to be packaged as well
-            os.makedirs(code_dir_dest, exist_ok=True)
-            shutil.copytree(package_dir, os.path.join(code_dir_dest, "weather_pred"))
-            shutil.copy(os.path.join(package_dir, "inference/inference.py"), code_dir_dest)
+            # os.makedirs(code_dir_dest, exist_ok=True)
+            # shutil.copytree(package_dir, os.path.join(code_dir_dest, "weather_pred"))
+            # shutil.copy(os.path.join(package_dir, "inference/inference.py"), code_dir_dest)
 
 
 

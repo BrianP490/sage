@@ -40,8 +40,11 @@ SOURCE_DIR = (
     Path(__file__).resolve().parents[2]
 )  # Go up 2 levels: orchestrate/ → package_name → src
 # Set-up a location on the Host to mount to; Used to share/store files
-CONTAINER_ROOT = Path.home() / "local_mode"  # /home/<user_name>/local_mode/
+TEMP_DIR = "/tmp/sagemaker_local"
+CONTAINER_ROOT = Path(TEMP_DIR)
 CONTAINER_ROOT.mkdir(parents=True, exist_ok=True)
+
+
 # AWS S3 Bucket Name
 AWS_BUCKET = "alexandria-reborn"
 
@@ -116,7 +119,7 @@ INFER_INSTANCE_TYPE = "ml.c5.xlarge"
 SERVE_MODE = ServeMode.LOCAL_CONTAINER  # Local Docker container
 
 
-SCHEMA_SAMPLE_INPUTS = [[312.0, 0.17, 1.06, 8.05, 52.0]]
+SCHEMA_SAMPLE_INPUTS = [[345.0,0.17,1.06,8.05,52.0]]
 SCHEMA_SAMPLE_OUTPUTS = [[62.0]]
 
 
@@ -200,8 +203,15 @@ def main():
     )  # Moves "model" and "outputs" to "artifacts" dir, then compresses to "compressed_artifacts"
 
     # Using CLOUD DATA
-    # trainer.train(logs=True)  # Starts training on local Docker container without any data download; copies the code, and runs the source_code
-    logger.info(f"Check out new content in '{CONTAINER_ROOT}'. Includes the 'model', 'input', 'outputs' and other directories")
+    # try:
+    #     trainer.train(logs=True)  # Starts training on local Docker container without any data download; copies the code, and runs the source_code
+    # except Exception as e:
+    #     if "Permission denied" in str(e):
+    #         print("Cleanup failed due to root permissions, but training finished. Continuing...")
+    #     else:
+    #         raise e
+        
+    logger.info(f"Check out new content in '{CONTAINER_ROOT}'. Includes the 'artifacts', 'model', 'input', 'outputs' and other directories")
 
     # return
 
@@ -210,9 +220,7 @@ def main():
         model_artifacts_locator = str(
             CONTAINER_ROOT / "artifacts" / "model"
         )  # Path on your WSL drive (unpacked version instead of tarball)
-        # model_artifacts_locator = str(CONTAINER_ROOT / "compressed_artifacts" / "model.tar.gz")  # Path on your WSL drive
 
-        # INFERENCE_SPEC = AgentInferenceSpec(model_path=model_artifacts_locator)
     else:
         # Get Trainer Output Path in S3
         # job_name = trainer._latest_training_job.training_job_name
@@ -334,17 +342,24 @@ def main():
         # Provide instance type, count, serverless settings here.
         # The model must be built before calling deploy()
         # Starts inference endpoint on Docker container and returns a predictor/endpoint locally
-        endpoint = builder.deploy_local(
-            endpoint_name=ENDPOINT_NAME,
-            wait=True,  # The call should wait until the deployment completes.
-            update_endpoint=False,  # Update an existing endpoint in-place vs create new.
-            container_timeout_in_seconds=300,  # Max time to wait for container to become healthy
-        )
+        try:
+            endpoint = builder.deploy_local(
+                endpoint_name=ENDPOINT_NAME,
+                wait=True,  # The call should wait until the deployment completes.
+                update_endpoint=False,  # Update an existing endpoint in-place vs create new.
+                container_timeout_in_seconds=300,  # Max time to wait for container to become healthy
+            )
+        except KeyboardInterrupt as e:
+            logger.info("Deployment interrupted by user. Exiting...")
 
         logger.info(f"Attempting to sample the endpoint...")
 
         # Sample the model ;
-        inputs = [[345.1, 0.18, 1.07, 9.05, 51.0]]
+        # 312.0,0.19,0.2,5.37,55.0,64.0
+        # 312.0,0.27,0.2700000000000004,8.95,57.0,64.0
+        # 182.0,0.0,0.0,7.61,67.0,97.0
+        # 294.0,0.0,0.2600000000000007,5.82,63.0,97.0
+        inputs = [[345.0,0.17,1.06,8.05,52.0]]
         # payload = json.dumps({"inputs": inputs}).encode(
         #     "utf-8"
         # )  # Convert to json string then into envoded bytes

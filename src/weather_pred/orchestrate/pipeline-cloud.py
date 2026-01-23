@@ -40,7 +40,8 @@ SOURCE_DIR = (
     Path(__file__).resolve().parents[2]
 )  # Go up 2 levels: orchestrate/ → package_name → src
 # Set-up a location on the Host to mount to; Used to share/store files
-CONTAINER_ROOT = Path.home() / "local_mode"  # /home/<user_name>/local_mode/
+TEMP_DIR = "/tmp/sagemaker_local"
+CONTAINER_ROOT = Path(TEMP_DIR)
 CONTAINER_ROOT.mkdir(parents=True, exist_ok=True)
 # AWS S3 Bucket Name
 AWS_BUCKET = "alexandria-reborn"
@@ -102,6 +103,7 @@ TRAIN_INSTANCE_TYPE = "ml.c5.xlarge"
 TRAIN_INSTANCE_COUNT = 1
 TRAIN_VOLUME_SIZE_GB = 15
 TRAIN_MODE = TrainingMode.SAGEMAKER_TRAINING_JOB
+TRAIN_S3_OUTPUT_PATH = f"s3://{AWS_BUCKET}/{PROJECT_PREFIX}/local-trainers/"
 TRAINER_OUTPUT_DIR = str(CONTAINER_ROOT / "model")
 WEIGHTS_FILE_NAME = "model.pt"
 LOCAL_TAR = "model.tar.gz"
@@ -111,11 +113,13 @@ INFER_INSTANCE_TYPE = "ml.c5.xlarge"
 # c6g.medium - 1 vCPU | 2 GiB
 # c6g.large - 2 vCPU | 4 GiB
 # c5.xlarge - 4 vCPU | 8 GiB
+INFER_INSTANCE_COUNT = 1
+INFER_VOLUME_SIZE_GB = 15
 
 SERVE_MODE = ServeMode.SAGEMAKER_ENDPOINT
 
 
-SCHEMA_SAMPLE_INPUTS = [[312.0, 0.17, 1.06, 8.05, 52.0]]
+SCHEMA_SAMPLE_INPUTS = [[345.0,0.17,1.06,8.05,52.0]]
 SCHEMA_SAMPLE_OUTPUTS = [[62.0]]
 
 
@@ -156,11 +160,6 @@ if RUN_LOCAL:
     os.environ["TMPDIR"] = TMPDIR
 
 
-# custom_dependencies = {
-#     "auto": False,  # Disables automatic scanning
-#     "local": ["src"],  # Copies your 'src' folder
-#     "requirements": "requirements.txt",
-# }
 custom_dependencies = ["requirements.txt"]
 
 
@@ -177,12 +176,18 @@ def main():
             ".DS_Store",
             ".cache",
             ".ipynb_checkpoints",
+            "*.egg-info",
         ],
     )
     compute = Compute(
         instance_type=TRAIN_INSTANCE_TYPE,
         instance_count=TRAIN_INSTANCE_COUNT,
         volume_size_in_gb=TRAIN_VOLUME_SIZE_GB,
+    )
+    my_output_config = OutputDataConfig(
+        s3_output_path=TRAIN_S3_OUTPUT_PATH,
+        compression_type="GZIP",  # Options: 'GZIP' (default) or 'NONE'
+        # kms_key_id="your-kms-key-arn", # Optional: for encryption at rest
     )
 
     logger.info(f"CONTAINER_ROOT: {CONTAINER_ROOT}")
@@ -193,6 +198,7 @@ def main():
         role=SAGEMAKER_ROLE,  # not used in local mode, but param is required
         sagemaker_session=sm_sess,
         training_mode=TRAIN_MODE,
+        output_data_config=my_output_config,
         base_job_name="local-trainer",
         source_code=src,
         compute=compute,  # Use on-cloud
@@ -202,8 +208,8 @@ def main():
     )
 
     # Using CLOUD DATA
-    trainer.train()
-    return
+    # trainer.train()
+    # return
 
     if RUN_LOCAL:
         # Define paths
@@ -221,7 +227,7 @@ def main():
 
         # model_artifacts_locator = desc["ModelArtifacts"]["S3ModelArtifacts"]
 
-        model_artifacts_locator = "s3://alexandria-reborn/CA-Weather-Fire/local-trainer/local-trainer-20260119091515/output/model.tar.gz"
+        model_artifacts_locator = "s3://alexandria-reborn/CA-Weather-Fire/local-trainer/local-trainer-20260122202558/output/model.tar.gz"
 
         parsed_uri = urlparse(model_artifacts_locator)
         bucket = parsed_uri.netloc
@@ -240,26 +246,31 @@ def main():
         #     f"\n=====================================\
         #             \nBUILDING TRAINED MODEL from '{LOCAL_BUILD_DIR}'"
         # )
-        INFERENCE_SPEC = AgentInferenceSpec()
-
-        build_src = SourceCode(
-            source_dir=str(SOURCE_DIR),  # Everything inside the `source_dir` will be copied to `/opt/ml/model/code/**`
-            entry_script="inference.py",  # Relative to the source_dir
-            # command="python train.py epochs=1",
-            ignore_patterns=[
-                ".env",
-                ".git",
-                "__pycache__",
-                ".DS_Store",
-                ".cache",
-                ".ipynb_checkpoints",
-            ],
+        build_compute = Compute(
+            instance_type=INFER_INSTANCE_TYPE,
+            instance_count=INFER_INSTANCE_COUNT,
+            volume_size_in_gb=INFER_VOLUME_SIZE_GB,
         )
+    INFERENCE_SPEC = AgentInferenceSpec()
+
+    # build_src = SourceCode(
+    #     source_dir=str(SOURCE_DIR),  # Everything inside the `source_dir` will be copied to `/opt/ml/model/code/**`
+    #     entry_script="inference.py",  # Relative to the source_dir
+    #     # command="python train.py epochs=1",
+    #     ignore_patterns=[
+    #         ".env",
+    #         ".git",
+    #         "__pycache__",
+    #         ".DS_Store",
+    #         ".cache",
+    #         ".ipynb_checkpoints",
+    #     ],
+    # )
     # Instantiate a ModelBuilder Orchestrator "Wrapper"
     builder = ModelBuilder(
         mode=SERVE_MODE,
-        # model_path=LOCAL_BUILD_DIR,  # Copies your code/configs from S3 .tar.gz folder to copy over to container
-        s3_model_data_url=model_artifacts_locator,  # Where the input weights are in S3
+        # model_path=LOCAL_BUILD_DIR,  # Copies your LOCAL code/configs to container
+        s3_model_data_url=model_artifacts_locator,  # Where the compressed model artifact objects are in S3; unpacks it into /opt/ml/model/ inside the cloud instance; ALSO where the final serving tarball is uploaded to
         model_metadata={"ML_FRAMEWORK": "pytorch", "ML_FRAMEWORK_VERSION": "2.6.0"},
         role_arn=SAGEMAKER_ROLE,
         sagemaker_session=sm_sess,
@@ -267,9 +278,9 @@ def main():
             **env_vars,
             "SAGEMAKER_MODEL_SERVER_WORKERS": "1",  # This limits TorchServe to exactly one Python worker process
         },
-        source_code=build_src,
+        # source_code=build_src,
         log_level=logging.DEBUG,
-        instance_type=INFER_INSTANCE_TYPE,
+        compute=build_compute,
         # schema_builder=SchemaBuilder(
         #     sample_input=SCHEMA_SAMPLE_INPUTS, sample_output=SCHEMA_SAMPLE_OUTPUTS
         # ),
@@ -282,11 +293,10 @@ def main():
 
     # Packages code + dependencies per the server Returning a deployable Model object (configuration + artifact metadata)
     # Builds serving artifacts within container returning a deployable model object (not an endpoint)
-    # Uploads the model package to S3 if provided in ModelBuilder Instantiation
+    # Uploads the model package to S3 if provided in ModelBuilder Instantiation "s3_model_data_url"
+    # When you call .build(), it inherits almost everything from that constructor unless you specifically want to override it for that specific build.
     built_model = builder.build(
         model_name=MODEL_NAME,
-        mode=SERVE_MODE,
-        sagemaker_session=sm_sess,
     )
 
     endpoint = None  # Initialize to ensure finally block can check it
@@ -305,16 +315,20 @@ def main():
         endpoint = builder.deploy(
             endpoint_name=ENDPOINT_NAME,
             wait=True,  # The call should wait until the deployment completes.
-            initial_instance_count=1,
-            instance_type=INFER_INSTANCE_TYPE,
+            # initial_instance_count=1,
+            # instance_type=INFER_INSTANCE_TYPE,
             update_endpoint=False,  # Update an existing endpoint in-place vs create new.
-            # container_timeout_in_seconds=300,  # Max time to wait for container to become healthy
+            container_timeout_in_seconds=300,  # Max time to wait for container to become healthy
         )
 
         logger.info(f"Attempting to sample the endpoint...")
 
-        # Sample the model
-        inputs = [[345.0, 0.17, 1.06, 8.05, 52.0]]
+        # Sample the model ;
+        # 312.0,0.19,0.2,5.37,55.0,64.0
+        # 312.0,0.27,0.2700000000000004,8.95,57.0,64.0
+        # 182.0,0.0,0.0,7.61,67.0,97.0
+        # 294.0,0.0,0.2600000000000007,5.82,63.0,97.0
+        inputs = [[345.0,0.17,1.06,8.05,52.0]]
         # payload = json.dumps({"inputs": inputs}).encode(
         #     "utf-8"
         # )  # Convert to json string then into envoded bytes

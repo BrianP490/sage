@@ -14,14 +14,14 @@
   }
   ,
   "parser_defaults": {
-    "epochs": 1,
+    "epochs": 128,
     "learning_rate": 0.0003,
     "max_grad_norm": 3.0,
     "dataloader_batch_size": 64,
     "dataloader_pin_memory": false,
     "dataloader_num_workers": 0,
     "log_iterations": 128,
-    "eval_iterations": 128,
+    "eval_iterations": 32,
     "use_cuda": false,
     "device": "cpu",
     "save_model": true,
